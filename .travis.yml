@@ -33,13 +33,21 @@ DEPLOY_TO_GITHUB: &DEPLOY_TO_GITHUB
       tags: true
     provider: releases
     skip_cleanup: true
-  if: branch = master OR branch =~ /^\d/
+  if: branch = sccache OR branch =~ /^\d/
 
 INSTALL_AWS: &INSTALL_AWS
   |
     pip install --user awscli
     export PATH=$HOME/.local/bin:$PATH
     mkdir -p ~/$TRAVIS_BUILD_NUMBER
+
+before_install:
+  - curl -L https://github.com/mozilla/sccache/releases/download/0.2.7/sccache-0.2.7-x86_64-unknown-linux-musl.tar.gz | tar xzf -
+  - export PATH=$PATH:`pwd`/sccache-0.2.7-x86_64-unknown-linux-musl
+  - export RUSTC_WRAPPER=sccache
+
+after_script:
+  - sccache -s
 
 matrix:
   include:
@@ -67,7 +75,7 @@ matrix:
         - cargo test -p wasm-bindgen-futures --target wasm32-unknown-unknown
       addons:
         firefox: latest
-      if: branch = master
+      if: branch = sccache
 
     # Tests the `nightly` feature of wasm-bindgen
     - rust: nightly
@@ -76,7 +84,7 @@ matrix:
         - *INSTALL_NODE_VIA_NVM
       script:
         - cargo test --target wasm32-unknown-unknown --features nightly --test wasm
-      if: branch = master
+      if: branch = sccache
 
     # All examples work
     - rust: nightly
@@ -95,7 +103,7 @@ matrix:
              ./build.sh) || exit 1;
           done
         - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync --quiet ~/$TRAVIS_BUILD_NUMBER s3://wasm-bindgen-ci/$TRAVIS_BUILD_NUMBER; fi
-      if: branch = master
+      if: branch = sccache
     - rust: nightly
       name: "examples - raytracer"
       install:
@@ -110,7 +118,7 @@ matrix:
         - mkdir -p $dst
         - cp examples/raytrace-parallel/*.{js,html,wasm} $dst
         - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync ~/$TRAVIS_BUILD_NUMBER s3://wasm-bindgen-ci/$TRAVIS_BUILD_NUMBER; fi
-      if: branch = master
+      if: branch = sccache
 
     # The `web-sys` crate's tests pass
     - rust: beta
@@ -131,7 +139,7 @@ matrix:
       addons:
         firefox: latest
         chrome: stable
-      if: branch = master
+      if: branch = sccache
 
     # The `js-sys` crate's tests pass
     - rust: beta
@@ -145,7 +153,7 @@ matrix:
       addons:
         firefox: latest
         chrome: stable
-      if: branch = master
+      if: branch = sccache
 
     # WebIDL tests pass
     - rust: beta
@@ -154,13 +162,13 @@ matrix:
       script:
         - cargo test -p wasm-bindgen-webidl
         - cargo test -p webidl-tests --target wasm32-unknown-unknown
-      if: branch = master
+      if: branch = sccache
 
     # UI tests for the macro work just fine
     - rust: nightly
       env: JOB=macro-ui
       script: cargo test -p ui-tests
-      if: branch = master
+      if: branch = sccache
 
     # Dist linux binary
     - rust: nightly
@@ -189,7 +197,7 @@ matrix:
     - rust: stable
       env: JOB=check-stable-cli
       script: cargo check --manifest-path crates/cli/Cargo.toml
-      if: branch = master
+      if: branch = sccache
 
     # Build mdbook documentation
     - rust: stable
@@ -204,7 +212,7 @@ matrix:
         - rm -rf ~/$TRAVIS_BUILD_NUMBER
         - mv guide/book ~/$TRAVIS_BUILD_NUMBER
         - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync --quiet ~/$TRAVIS_BUILD_NUMBER s3://wasm-bindgen-ci/$TRAVIS_BUILD_NUMBER; fi
-      if: branch = master
+      if: branch = sccache
 
     # Build API documentation
     - rust: nightly
@@ -217,7 +225,7 @@ matrix:
         - cargo doc --no-deps --manifest-path crates/web-sys/Cargo.toml --all-features
         - mv target/doc ~/$TRAVIS_BUILD_NUMBER/api
         - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync --quiet ~/$TRAVIS_BUILD_NUMBER s3://wasm-bindgen-ci/$TRAVIS_BUILD_NUMBER; fi
-      if: branch = master
+      if: branch = sccache
 
     # Take compiled examples and mdbook/API docs and deploy them to gh-pages
     - stage: deploy-gh-pages
@@ -233,7 +241,7 @@ matrix:
         keep-history: false
       after_deploy:
         - aws s3 rm --recursive s3://rust-lang-ci-sccache2/$TRAVIS_BUILD_NUMBER
-      if: branch = master AND type != pull_request
+      if: branch = sccache AND type != pull_request
 
 notifications:
   email:
